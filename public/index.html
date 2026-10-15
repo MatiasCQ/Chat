@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chasqui</title>
+  <link rel="icon" type="image/png" href="img/icon-192.png">
+  <link rel="apple-touch-icon" href="img/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section id="view-auth" class="auth" hidden>
+  <form id="auth-form" class="auth-card">
+    <h1>Chasqui</h1>
+    <input id="auth-email" type="email" placeholder="Correo" autocomplete="email" required>
+    <input id="auth-password" type="password" placeholder="Contraseña (mín. 6)" autocomplete="current-password" minlength="6" required>
+    <p id="auth-error" class="error"></p>
+    <button id="btn-login" type="submit">Iniciar Sesión</button>
+    <button id="btn-register" type="button" class="secondary">Registrarse</button>
+    <div class="sep"><span>o</span></div>
+    <button id="btn-google" type="button" class="google">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      Continuar con Google
+    </button>
+  </form>
+</section>
+
+<!-- ============ APP ============ -->
+<div id="view-app" class="app" hidden>
+
+  <!-- Barra extrema izquierda: servidores -->
+  <nav id="server-rail" class="rail">
+    <button id="btn-home" class="rail-btn active" title="Mensajes directos">💬</button>
+    <div class="rail-sep"></div>
+    <div id="server-list" class="server-list"></div>
+    <button id="btn-add-server" class="rail-btn add" title="Crear o unirse a un servidor">+</button>
+  </nav>
+
+  <!-- Barra lateral: MDs o canales -->
+  <aside id="sidebar" class="sidebar">
+    <header class="sidebar-header">
+      <strong id="sidebar-title">Mensajes directos</strong>
+      <button id="btn-server-settings" class="icon-btn" title="Ajustes del servidor" hidden>⚙</button>
+    </header>
+
+    <div id="sidebar-dm" class="sidebar-body">
+      <button id="btn-add-friends" class="side-action">＋ Añadir amigos</button>
+      <button id="btn-create-group" class="side-action">👥 Crear MD grupal</button>
+      <button id="btn-archived" class="side-action">🗄 Chats Archivados</button>
+      <div class="side-label">Mensajes directos</div>
+      <ul id="dm-list" class="item-list"></ul>
+    </div>
+
+    <div id="sidebar-server" class="sidebar-body" hidden>
+      <div id="channel-list"></div>
+    </div>
+
+    <footer class="user-panel">
+      <button id="btn-user-status" class="user-box" title="Cambiar estado">
+        <span class="avatar-wrap"><img id="me-photo" class="avatar" alt=""><span id="me-status-dot" class="dot online"></span></span>
+        <span class="user-names"><strong id="me-name"></strong><small id="me-status-text">En línea</small></span>
+      </button>
+      <button id="btn-notif" class="icon-btn" title="Activar notificaciones" hidden>🔔</button>
+      <button id="btn-profile" class="icon-btn" title="Mi perfil">✎</button>
+      <button id="btn-logout" class="icon-btn" title="Cerrar sesión">⏻</button>
+    </footer>
+  </aside>
+
+  <!-- Zona principal -->
+  <main id="main" class="main">
+    <div id="empty-state" class="empty">Selecciona un chat para empezar</div>
+
+    <section id="conversation" class="conversation" hidden>
+      <header class="conv-header">
+        <button id="btn-back" class="icon-btn back" title="Volver">←</button>
+        <span id="conv-icon" class="hash">@</span>
+        <div class="conv-title"><strong id="conv-name"></strong><small id="conv-sub"></small></div>
+        <div class="conv-actions">
+          <button id="btn-nickname" class="icon-btn" title="Cambiar apodos" hidden>🏷</button>
+          <button id="btn-group-manage" class="icon-btn" title="Gestionar grupo" hidden>🛠</button>
+          <button id="btn-archive" class="icon-btn" title="Archivar MD" hidden>🗄</button>
+          <button id="btn-mute" class="icon-btn" title="Silenciar notificaciones">🔕</button>
+          <button id="btn-members-toggle" class="icon-btn" title="Miembros">👥</button>
+        </div>
+      </header>
+
+      <div class="conv-body">
+        <div class="conv-col">
+          <div id="messages" class="messages"></div>
+          <div id="typing-indicator" class="typing" hidden>
+            <span class="typing-dots"><i></i><i></i><i></i></span><span id="typing-text"></span>
+          </div>
+
+          <div class="composer-wrap">
+            <div id="plus-menu" class="popup" hidden>
+              <button id="btn-create-poll" type="button">📊 Crear encuesta</button>
+            </div>
+            <ul id="mention-menu" class="popup mention-menu" hidden></ul>
+            <div id="gif-panel" class="popup gif-panel" hidden>
+              <div class="tabs">
+                <button id="gif-tab-search" type="button" class="tab active">Buscar</button>
+                <button id="gif-tab-fav" type="button" class="tab">★ Favoritos</button>
+              </div>
+              <input id="gif-query" type="search" placeholder="Buscar GIFs...">
+              <div id="gif-grid" class="gif-grid"></div>
+            </div>
+
+            <form id="message-form" class="composer" autocomplete="off">
+              <button id="btn-plus" type="button" class="icon-btn" title="Más opciones">+</button>
+              <input id="message-input" type="text" placeholder="Escribe un mensaje (usa @ para mencionar)" maxlength="4000">
+              <button id="btn-gif" type="button" class="icon-btn gif-btn" title="GIFs">GIF</button>
+              <button id="btn-send" type="submit">Enviar</button>
+            </form>
+          </div>
+        </div>
+
+        <aside id="members-panel" class="members" hidden>
+          <div id="members-label" class="side-label">Miembros</div>
+          <ul id="members-list" class="item-list"></ul>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ MENÚS FLOTANTES ============ -->
+<div id="status-menu" class="popup status-menu" hidden>
+  <button type="button" data-status="online"><span class="dot online"></span> En línea</button>
+  <button type="button" data-status="dnd"><span class="dot dnd"></span> No molestar</button>
+  <small>«Inactivo» se activa automáticamente.</small>
+</div>
+<div id="ctx-menu" class="popup ctx-menu" hidden></div>
+
+<!-- ============ MODALES ============ -->
+<div id="modal-add-friends" class="modal" hidden><div class="modal-card">
+  <h2>Añadir amigos</h2>
+  <input id="friends-filter" type="search" placeholder="Filtrar por nombre">
+  <ul id="friends-list" class="item-list scroll"></ul>   <!-- [Icono] [Nombre] | [Descripción corta] | [Añadir] -->
+  <div class="modal-actions"><button class="secondary" data-close>Cerrar</button></div>
+</div></div>
+
+<div id="modal-archived" class="modal" hidden><div class="modal-card">
+  <h2>Chats Archivados</h2>
+  <ul id="archived-list" class="item-list scroll"></ul>   <!-- [Icono/Usuario] | [Descripción corta] | [Desarchivar] -->
+  <div class="modal-actions"><button class="secondary" data-close>Cerrar</button></div>
+</div></div>
+
+<div id="modal-rename-group" class="modal" hidden><div class="modal-card">
+  <h2>Cambiar Nombre del Grupo</h2>
+  <input id="rename-input" type="text" placeholder="Nuevo nombre" maxlength="100">
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-rename-save">Guardar</button>
+  </div>
+</div></div>
+
+<div id="modal-alert" class="modal" hidden><div class="modal-card">
+  <h2 id="alert-text"></h2>
+  <div class="modal-actions"><button data-close>Aceptar</button></div>
+</div></div>
+
+<div id="modal-create-group" class="modal" hidden><div class="modal-card">
+  <h2>Crear MD grupal</h2>
+  <input id="group-name" type="text" placeholder="Nombre del grupo" maxlength="100">
+  <ul id="group-candidates" class="item-list scroll"></ul>
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-group-create">Crear</button>
+  </div>
+</div></div>
+
+<div id="modal-group-manage" class="modal" hidden><div class="modal-card">
+  <h2>Gestionar grupo</h2>
+  <input id="group-rename" type="text" placeholder="Nombre del grupo" maxlength="100">
+  <ul id="group-members" class="item-list scroll"></ul>  <!-- Expulsar / Transferir propiedad -->
+  <div class="modal-actions">
+    <button id="btn-group-leave" class="danger">Salir del grupo</button>
+    <button class="secondary" data-close>Cerrar</button>
+    <button id="btn-group-save">Guardar</button>
+  </div>
+</div></div>
+
+<div id="modal-server" class="modal" hidden><div class="modal-card">
+  <h2>Servidores</h2>
+  <h3>Crear servidor</h3>
+  <input id="server-name" type="text" placeholder="Nombre del servidor" maxlength="100">
+  <button id="btn-server-create">Crear</button>
+  <h3>Unirse con invitación</h3>
+  <input id="invite-code" type="text" placeholder="Servidor:Código (ej. abc123:XyZ...)">
+  <button id="btn-server-join" class="secondary">Unirse</button>
+  <div class="modal-actions"><button class="secondary" data-close>Cerrar</button></div>
+</div></div>
+
+<div id="modal-server-settings" class="modal" hidden><div class="modal-card wide">
+  <h2 id="ss-title">Ajustes del servidor</h2>
+  <div class="tabs">
+    <button class="tab active" data-tab="ss-channels">Canales</button>
+    <button class="tab" data-tab="ss-roles">Roles</button>
+    <button class="tab" data-tab="ss-members">Miembros</button>
+    <button class="tab" data-tab="ss-invites">Invitaciones</button>
+  </div>
+
+  <div id="ss-channels" class="tab-panel">
+    <div class="row-inline"><input id="cat-name" type="text" placeholder="Nueva categoría"><button id="btn-cat-add">Añadir</button></div>
+    <div class="row-inline">
+      <input id="channel-name" type="text" placeholder="Nuevo canal">
+      <select id="channel-category"></select>
+      <button id="btn-channel-add">Crear</button>
+    </div>
+    <ul id="settings-channels" class="item-list scroll"></ul>
+  </div>
+
+  <div id="ss-roles" class="tab-panel" hidden>
+    <div class="row-inline"><input id="role-name" type="text" placeholder="Nombre del rol"></div>
+    <label><input type="checkbox" id="perm-isAdmin"> Administrador</label>
+    <label><input type="checkbox" id="perm-canKick"> Puede expulsar</label>
+    <label><input type="checkbox" id="perm-canInvite"> Puede invitar</label>
+    <button id="btn-role-add">Crear rol</button>
+    <ul id="settings-roles" class="item-list scroll"></ul>
+  </div>
+
+  <div id="ss-members" class="tab-panel" hidden>
+    <ul id="settings-members" class="item-list scroll"></ul> <!-- rol (select) + Expulsar; nunca al dueño -->
+  </div>
+
+  <div id="ss-invites" class="tab-panel" hidden>
+    <button id="btn-invite-create">Crear invitación (un solo uso)</button>
+    <input id="invite-output" type="text" readonly placeholder="Aquí aparecerá el código">
+    <ul id="settings-invites" class="item-list scroll"></ul>
+  </div>
+
+  <div class="modal-actions">
+    <button id="btn-server-leave" class="danger">Salir</button>
+    <button id="btn-server-delete" class="danger" hidden>Eliminar servidor</button>
+    <button class="secondary" data-close>Cerrar</button>
+  </div>
+</div></div>
+
+<div id="modal-channel" class="modal" hidden><div class="modal-card">
+  <h2>Permisos del canal</h2>
+  <input id="ch-edit-name" type="text" placeholder="Nombre del canal">
+  <label><input type="checkbox" id="ch-all" checked> Todos</label>
+  <div id="ch-roles" class="checklist"></div>   <!-- checklist de roles; habilitado solo si "Todos" está desactivado -->
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-channel-save">Guardar</button>
+  </div>
+</div></div>
+
+<div id="modal-profile" class="modal" hidden><div class="modal-card">
+  <h2>Mi perfil</h2>
+  <label>Nombre de usuario <input id="profile-name" type="text" maxlength="32" required></label>
+  <label>Descripción corta <small id="profile-short-count">0/30</small>
+    <input id="profile-short" type="text" maxlength="30"></label>
+  <label>Descripción larga <textarea id="profile-long" rows="5" maxlength="2000"></textarea></label>
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-profile-save">Guardar</button>
+  </div>
+</div></div>
+
+<div id="modal-nickname" class="modal" hidden><div class="modal-card">
+  <h2>Cambiar apodos</h2>
+  <p class="muted">Exclusivos de este MD y visibles para ambos. Déjalo vacío para volver al nombre de usuario.</p>
+  <div id="nick-rows" class="nick-rows"></div>   <!-- [Nombre]: [input] por participante -->
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-nick-save">Guardar</button>
+  </div>
+</div></div>
+
+<div id="modal-mute" class="modal" hidden><div class="modal-card">
+  <h2>Silenciar notificaciones</h2>
+  <div id="mute-durations" class="checklist">
+    <label><input type="radio" name="mute-duration" value="15" checked> 15 minutos</label>
+    <label><input type="radio" name="mute-duration" value="30"> 30 minutos</label>
+    <label><input type="radio" name="mute-duration" value="45"> 45 minutos</label>
+    <label><input type="radio" name="mute-duration" value="60"> 1 hora</label>
+    <label><input type="radio" name="mute-duration" value="90"> 1.5 horas</label>
+    <label><input type="radio" name="mute-duration" value="120"> 2 horas</label>
+    <label><input type="radio" name="mute-duration" value="forever"> Hasta que lo reactive</label>
+  </div>
+  <label><input type="checkbox" id="mute-messages" checked> Silenciar solo mensajes</label>
+  <label><input type="checkbox" id="mute-mentions"> Silenciar solo menciones</label>
+  <div class="modal-actions">
+    <button id="btn-unmute" class="secondary">Reactivar</button>
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-mute-save">Silenciar</button>
+  </div>
+</div></div>
+
+<div id="modal-poll" class="modal" hidden><div class="modal-card">
+  <h2>Crear encuesta</h2>
+  <input id="poll-question" type="text" placeholder="Pregunta" maxlength="200">
+  <div id="poll-options">
+    <input type="text" class="poll-opt" placeholder="Opción 1" maxlength="100">
+    <input type="text" class="poll-opt" placeholder="Opción 2" maxlength="100">
+  </div>
+  <button id="btn-poll-add-option" class="secondary" type="button">+ Opción</button>
+  <div class="modal-actions">
+    <button class="secondary" data-close>Cancelar</button>
+    <button id="btn-poll-create">Publicar</button>
+  </div>
+</div></div>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="js/ui.js"></script>
+</body>
+</html>

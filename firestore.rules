@@ -1,0 +1,233 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ================= Helpers ================= */
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+
+    function serverPath(s)     { return /databases/$(database)/documents/servers/$(s); }
+    function memberPath(s, u)  { return /databases/$(database)/documents/servers/$(s)/members/$(u); }
+    function rolePath(s, r)    { return /databases/$(database)/documents/servers/$(s)/roles/$(r); }
+    function channelPath(s, c) { return /databases/$(database)/documents/servers/$(s)/channels/$(c); }
+    function invitePath(s, i)  { return /databases/$(database)/documents/servers/$(s)/invitations/$(i); }
+    function chatPath(c)       { return /databases/$(database)/documents/chats/$(c); }
+
+    // ---- Servidores / roles (cada miembro tiene UN roleId o null) ----
+    function isMember(s) { return signedIn() && exists(memberPath(s, me())); }
+    function isOwner(s)  { return signedIn() && get(serverPath(s)).data.ownerId == me(); }
+    function myRoleId(s) { return get(memberPath(s, me())).data.get('roleId', null); }
+    function rolePerms(s) {
+      return myRoleId(s) == null ? {} : get(rolePath(s, myRoleId(s))).data.get('permissions', {});
+    }
+    function isAdminOf(s) { return isMember(s) && (isOwner(s) || rolePerms(s).get('isAdmin', false)); }
+    function can(s, perm) { return isAdminOf(s) || (isMember(s) && rolePerms(s).get(perm, false)); }
+
+    // Mensajes de canal: se protegen aquí. Los metadatos del canal (nombre) los ven todos los miembros;
+    // la UI oculta los canales no permitidos.
+    function canReadChannel(s, c) {
+      let allowed = get(channelPath(s, c)).data.get('rolesAllowed', null);
+      return isMember(s) && (isAdminOf(s) || allowed == null || myRoleId(s) in allowed);
+    }
+
+    function joinedViaInvite(s) {
+      let m = getAfter(memberPath(s, me())).data;
+      return m.get('roleId', null) == null
+        && m.inviteId is string
+        && get(invitePath(s, m.inviteId)).data.get('used', true) == false
+        && getAfter(invitePath(s, m.inviteId)).data.used == true
+        && getAfter(invitePath(s, m.inviteId)).data.usedBy == me();
+    }
+
+    function serverUpdateOk(s) {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      let oldM = resource.data.members.toSet();
+      let newM = request.resource.data.members.toSet();
+      return
+        // renombrar / categorías
+        (isAdminOf(s) && keys.hasOnly(['name', 'categories']))
+        // transferir propiedad (solo dueño)
+        || (resource.data.ownerId == me() && keys.hasOnly(['ownerId'])
+            && request.resource.data.ownerId in resource.data.members)
+        // unirse con invitación de un solo uso
+        || (keys.hasOnly(['members']) && newM.difference(oldM) == [me()].toSet()
+            && oldM.difference(newM).size() == 0 && joinedViaInvite(s))
+        // expulsar (nunca al dueño)
+        || (keys.hasOnly(['members']) && can(s, 'canKick') && newM.difference(oldM).size() == 0
+            && oldM.difference(newM).size() >= 1
+            && !oldM.difference(newM).hasAny([resource.data.ownerId]))
+        // salir del servidor (el dueño no puede)
+        || (keys.hasOnly(['members']) && resource.data.ownerId != me()
+            && newM == oldM.difference([me()].toSet()));
+    }
+
+    // ---- Chats (MD / grupos) ----
+    function inChat(c) { return signedIn() && me() in get(chatPath(c)).data.participants; }
+
+    function chatUpdateOk() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      let oldP = resource.data.participants;
+      let newP = request.resource.data.participants;
+      return
+        // actividad (último mensaje)
+        keys.hasOnly(['lastMessage', 'lastMessageAt', 'lastSenderId', 'lastMessageId'])
+        // apodos compartidos (cualquier participante)
+        || (keys.hasOnly(['nicknames']) && request.resource.data.nicknames.keys().hasOnly(oldP))
+        // grupo: el dueño expulsa / añade / transfiere / renombra
+        || (resource.data.type == 'group' && resource.data.ownerId == me()
+            && keys.hasOnly(['participants', 'ownerId', 'name'])
+            && request.resource.data.ownerId in newP && newP.size() >= 2 && newP.size() <= 50)
+        // grupo: un miembro (no dueño) se va
+        || (resource.data.type == 'group' && resource.data.ownerId != me()
+            && keys.hasOnly(['participants'])
+            && newP.toSet() == oldP.toSet().difference([me()].toSet()));
+    }
+
+    function validMessage(d) {
+      return d.createdAt == request.time
+        && d.type in ['text', 'gif', 'poll']
+        && (d.type != 'text' || (d.text is string && d.text.size() > 0 && d.text.size() <= 4000))
+        && (d.type != 'gif'  || (d.gifUrl is string && d.gifUrl.matches('https://.*')))
+        && (d.type != 'poll' || (d.poll.question is string && d.poll.options is list
+                                 && d.poll.options.size() >= 2 && d.poll.options.size() <= 10))
+        && d.get('mentions', []) is list && d.get('mentions', []).size() <= 20;
+    }
+
+    function validProfile(d) {
+      return d.get('status', 'online') in ['online', 'idle', 'dnd', 'offline']
+        && d.get('shortDescription', '').size() <= 30
+        && d.get('displayName', 'x').size() >= 1 && d.get('displayName', 'x').size() <= 32
+        && d.get('customDescription', '').size() <= 2000;
+    }
+
+    /* ================= users ================= */
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid && validProfile(request.resource.data);
+      allow delete: if false;
+
+      // tokens, mutes, archived, prefs: solo el dueño
+      match /{sub}/{docId} {
+        allow read, write: if signedIn() && me() == uid;
+      }
+    }
+
+    /* ================= chats ================= */
+    match /chats/{chatId} {
+      allow read: if signedIn() && (resource == null || me() in resource.data.participants);
+      allow create: if signedIn()
+        && me() in request.resource.data.participants
+        && ((request.resource.data.type == 'dm'
+              && request.resource.data.participants.size() == 2
+              && (chatId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1]
+                  || chatId == request.resource.data.participants[1] + '_' + request.resource.data.participants[0]))
+            || (request.resource.data.type == 'group'
+                && request.resource.data.ownerId == me()
+                && request.resource.data.name is string && request.resource.data.name.size() > 0
+                && request.resource.data.participants.size() >= 2
+                && request.resource.data.participants.size() <= 50));
+      allow update: if signedIn() && me() in resource.data.participants && chatUpdateOk();
+      allow delete: if signedIn() && resource.data.type == 'group' && resource.data.ownerId == me();
+
+      match /messages/{messageId} {
+        allow read: if inChat(chatId);
+        allow create: if inChat(chatId) && request.resource.data.senderId == me()
+                      && validMessage(request.resource.data);
+        allow delete: if signedIn() && (resource.data.senderId == me()
+          || (get(chatPath(chatId)).data.type == 'group' && get(chatPath(chatId)).data.ownerId == me()));
+
+        match /votes/{voterId} {
+          allow read: if inChat(chatId);
+          allow create, update, delete: if inChat(chatId) && voterId == me();
+        }
+      }
+
+      match /typing/{typerId} {
+        allow read: if inChat(chatId);
+        allow write: if inChat(chatId) && typerId == me();
+      }
+    }
+
+    /* ================= servers ================= */
+    match /servers/{serverId} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == me()
+        && request.resource.data.members == [me()]
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100
+        && request.resource.data.categories is list;
+      allow update: if signedIn() && serverUpdateOk(serverId);
+      allow delete: if signedIn() && resource.data.ownerId == me();
+
+      match /members/{memberId} {
+        allow read: if isMember(serverId);
+        allow create: if signedIn() && memberId == me()
+          && request.resource.data.get('roleId', null) == null
+          && (
+            // el dueño se registra al crear el servidor (batch)
+            (!exists(serverPath(serverId)) && getAfter(serverPath(serverId)).data.ownerId == me())
+            // invitado con invitación vigente
+            || (request.resource.data.inviteId is string
+                && get(invitePath(serverId, request.resource.data.inviteId)).data.get('used', true) == false
+                && getAfter(invitePath(serverId, request.resource.data.inviteId)).data.usedBy == me())
+          );
+        allow update: if isAdminOf(serverId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['roleId']);
+        allow delete: if signedIn() && get(serverPath(serverId)).data.ownerId != memberId
+          && (memberId == me() || can(serverId, 'canKick'));
+      }
+
+      match /roles/{roleId} {
+        allow read: if isMember(serverId);
+        allow create, update: if isAdminOf(serverId)
+          && request.resource.data.name is string
+          && request.resource.data.permissions.keys().hasOnly(['isAdmin', 'canKick', 'canInvite']);
+        allow delete: if isAdminOf(serverId);
+      }
+
+      match /channels/{channelId} {
+        allow read: if isMember(serverId);
+        allow create, update: if isAdminOf(serverId)
+          && request.resource.data.name is string
+          && (request.resource.data.get('rolesAllowed', null) == null
+              || request.resource.data.rolesAllowed is list);
+        allow delete: if isAdminOf(serverId);
+
+        match /messages/{messageId} {
+          allow read: if canReadChannel(serverId, channelId);
+          allow create: if canReadChannel(serverId, channelId)
+            && request.resource.data.senderId == me() && validMessage(request.resource.data);
+          allow delete: if signedIn() && isMember(serverId)
+            && (resource.data.senderId == me() || isAdminOf(serverId));
+
+          match /votes/{voterId} {
+            allow read: if canReadChannel(serverId, channelId);
+            allow create, update, delete: if canReadChannel(serverId, channelId) && voterId == me();
+          }
+        }
+
+        match /typing/{typerId} {
+          allow read: if canReadChannel(serverId, channelId);
+          allow write: if canReadChannel(serverId, channelId) && typerId == me();
+        }
+      }
+
+      // Invitaciones de un solo uso (id aleatorio = código)
+      match /invitations/{inviteId} {
+        allow get: if signedIn();
+        allow list: if can(serverId, 'canInvite');
+        allow create: if can(serverId, 'canInvite')
+          && request.resource.data.createdBy == me()
+          && request.resource.data.used == false
+          && request.resource.data.serverName is string;
+        allow update: if signedIn()
+          && resource.data.used == false
+          && request.resource.data.used == true
+          && request.resource.data.usedBy == me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt']);
+        allow delete: if can(serverId, 'canInvite');
+      }
+    }
+  }
+}
